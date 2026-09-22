@@ -6,4 +6,5 @@ python-docx
 python-pptx
 faiss-cpu
 numpy
+fastembed
 gunicorn
