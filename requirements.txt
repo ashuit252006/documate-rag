@@ -1,0 +1,10 @@
+Flask
+python-dotenv
+google-genai
+PyMuPDF
+python-docx
+python-pptx
+faiss-cpu
+numpy
+sentence-transformers
+gunicorn
