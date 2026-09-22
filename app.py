@@ -1,6 +1,7 @@
 import os
 import uuid
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +22,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
 
 # =========================================================
@@ -68,13 +69,13 @@ ALLOWED_EXTENSIONS = {
 # MODELS
 # =========================================================
 
-# Gemini is used ONLY for answer generation.
+# Gemini is used ONLY for final answer generation.
 GENERATION_MODEL = "gemini-3.1-flash-lite"
 
-# Local embedding model.
-LOCAL_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+# Local FastEmbed model.
+LOCAL_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
-# all-MiniLM-L6-v2 produces 384-dimensional vectors.
+# BGE small model = 384-dimensional vectors.
 EMBEDDING_DIMENSION = 384
 
 
@@ -111,7 +112,7 @@ embedding_model_lock = threading.Lock()
 
 
 # =========================================================
-# LOCAL EMBEDDING MODEL
+# LOCAL FASTEMBED MODEL
 # =========================================================
 
 def get_embedding_model():
@@ -129,11 +130,13 @@ def get_embedding_model():
                 print(f"Model: {LOCAL_EMBEDDING_MODEL}")
                 print("====================================\n")
 
-                embedding_model = SentenceTransformer(
-                    LOCAL_EMBEDDING_MODEL
+                embedding_model = TextEmbedding(
+                    model_name=LOCAL_EMBEDDING_MODEL
                 )
 
-                print("Local embedding model loaded successfully.\n")
+                print(
+                    "Local embedding model loaded successfully.\n"
+                )
 
     return embedding_model
 
@@ -306,7 +309,6 @@ def extract_pptx(file_path):
                 text = clean_text(shape.text)
 
                 if text:
-
                     slide_text.append(text)
 
         combined_text = "\n".join(
@@ -403,11 +405,12 @@ def create_chunks(
 
 
 # =========================================================
-# LOCAL EMBEDDINGS
+# LOCAL FASTEMBED CREATION
 # =========================================================
 
 def create_embeddings(
     texts,
+    task_type="document",
     progress_callback=None
 ):
 
@@ -440,24 +443,21 @@ def create_embeddings(
 
         try:
 
-            vectors = model.encode(
+            if task_type == "query":
 
-                batch,
+                vectors = list(
+                    model.query_embed(batch)
+                )
 
-                batch_size=LOCAL_EMBEDDING_BATCH_SIZE,
+            else:
 
-                show_progress_bar=False,
-
-                convert_to_numpy=True,
-
-                normalize_embeddings=True
-
-            )
+                vectors = list(
+                    model.passage_embed(batch)
+                )
 
         except Exception as error:
 
             print("\nEmbedding error:")
-
             print(str(error))
 
             raise
@@ -466,6 +466,18 @@ def create_embeddings(
             vectors,
             dtype=np.float32
         )
+
+        # Normalize vectors for cosine-style similarity
+        # using FAISS inner product.
+        norms = np.linalg.norm(
+            vectors,
+            axis=1,
+            keepdims=True
+        )
+
+        norms[norms == 0] = 1.0
+
+        vectors = vectors / norms
 
         all_vectors.extend(vectors)
 
@@ -500,7 +512,8 @@ def add_document_to_index(
 
     vectors = create_embeddings(
         texts,
-        progress_callback
+        task_type="document",
+        progress_callback=progress_callback
     )
 
     if len(vectors) != len(new_chunks):
@@ -551,7 +564,8 @@ def search_documents(question):
         )
 
     query_vectors = create_embeddings(
-        [question]
+        [question],
+        task_type="query"
     )
 
     if not query_vectors:
@@ -753,8 +767,6 @@ ANSWER:
 
             if attempt < MAX_RETRIES - 1:
 
-                import time
-
                 time.sleep(
                     2 ** attempt
                 )
@@ -775,17 +787,9 @@ def process_document(
     try:
 
         print("\n====================================")
-
         print("STARTING DOCUMENT INDEXING")
-
-        print(
-            f"Document: {filename}"
-        )
-
-        print(
-            f"Pages: {len(pages)}"
-        )
-
+        print(f"Document: {filename}")
+        print(f"Pages: {len(pages)}")
         print("====================================\n")
 
         new_chunks = create_chunks(
@@ -812,8 +816,7 @@ def process_document(
         ):
 
             percent = int(
-                (completed / total)
-                * 100
+                (completed / total) * 100
             )
 
             documents[document_id][
@@ -1381,6 +1384,11 @@ if __name__ == "__main__":
     print(
         "Embedding dimension:",
         EMBEDDING_DIMENSION
+    )
+
+    print(
+        "Embedding batch size:",
+        LOCAL_EMBEDDING_BATCH_SIZE
     )
 
     print(
