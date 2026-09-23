@@ -131,9 +131,9 @@ def get_embedding_model():
                 print("====================================\n")
 
                embedding_model = TextEmbedding(
-    model_name=LOCAL_EMBEDDING_MODEL,
-    threads=1
-)
+               model_name=LOCAL_EMBEDDING_MODEL,
+               threads=1
+               )
                 print(
                     "Local embedding model loaded successfully.\n"
                 )
