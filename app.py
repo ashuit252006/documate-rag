@@ -89,7 +89,7 @@ CHUNK_OVERLAP = 250
 TOP_K = 5
 SIMILARITY_THRESHOLD = 0.25
 
-LOCAL_EMBEDDING_BATCH_SIZE = 64
+LOCAL_EMBEDDING_BATCH_SIZE = 8
 
 MAX_RETRIES = 3
 
@@ -130,10 +130,10 @@ def get_embedding_model():
                 print(f"Model: {LOCAL_EMBEDDING_MODEL}")
                 print("====================================\n")
 
-                embedding_model = TextEmbedding(
-                    model_name=LOCAL_EMBEDDING_MODEL
-                )
-
+               embedding_model = TextEmbedding(
+    model_name=LOCAL_EMBEDDING_MODEL,
+    threads=1
+)
                 print(
                     "Local embedding model loaded successfully.\n"
                 )
